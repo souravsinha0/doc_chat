@@ -1,0 +1,369 @@
+import streamlit as st
+import requests
+from datetime import date, datetime, timedelta
+from typing import List, Optional
+import uuid
+import jwt
+import extra_streamlit_components as stx
+from datetime import timedelta
+
+
+
+FASTAPI_URL = "http://localhost:8000"
+JWT_SECRET = "your_secret_key"   # ⚠️ must match FastAPI secret
+JWT_ALGORITHM = "HS256"
+
+st.set_page_config(page_title="Velocis AI Assistant", layout="wide", page_icon="🤖")
+
+st.markdown(""" <style> /* Hide Streamlit top right deploy button */ [data-testid="stToolbar"] { display: none; } /* Remove top padding from main container */ .block-container { padding-top: 1rem !important; } /* Reduce extra vertical space */ header[data-testid="stHeader"] { height: 0rem; } /* Make header tighter */ .header-bar { margin-top: -10px; margin-bottom: 0.5rem; } .footer { position: fixed; bottom: 10px; left: 0; width: 100%; text-align: center; font-size: 0.85rem; opacity: 0.7; } </style> <div class="footer"> 🚀 Powered by Velocis COE </div> """, unsafe_allow_html=True)
+
+# =========================
+# COOKIE MANAGER
+# =========================
+cookie_manager = stx.CookieManager()
+
+# =========================
+# TOKEN EXPIRY CHECK
+# =========================
+def is_token_expired(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        exp_timestamp = payload.get("exp")
+        if exp_timestamp:
+            return datetime.utcnow().timestamp() > exp_timestamp
+        return True
+    except Exception:
+        return True
+
+
+# =========================
+# AUTO LOGIN FROM COOKIE
+# =========================
+if "authenticated" not in st.session_state:
+    saved_token = cookie_manager.get("auth_token")
+    saved_username = cookie_manager.get("username")
+
+    if saved_token and saved_username and not is_token_expired(saved_token):
+        st.session_state.authenticated = True
+        st.session_state.token = saved_token
+        st.session_state.username = saved_username
+    else:
+        st.session_state.authenticated = False
+        st.session_state.token = None
+        st.session_state.username = None
+
+
+# =========================
+# SAFE RESPONSE HANDLER
+# =========================
+def handle_response(response):
+    try:
+        data = response.json()
+    except Exception:
+        return {"error": "Invalid JSON response"}
+
+    if response.status_code == 401:
+        logout_user("Session expired. Please login again.")
+        st.stop()
+
+    if response.status_code >= 400:
+        if isinstance(data, dict):
+            return {"error": data.get("detail", "Request failed")}
+        return {"error": "Request failed"}
+
+    # Return data as-is (could be dict OR list)
+    return data
+
+
+# =========================
+# LOGOUT FUNCTION
+# =========================
+def logout_user(message=None):
+    st.session_state.authenticated = False
+    st.session_state.token = None
+    st.session_state.username = None
+
+    cookie_manager.delete("auth_token")
+    cookie_manager.delete("username")
+
+    if message:
+        st.warning(message)
+
+    st.rerun()
+
+
+# =========================
+# API FUNCTIONS
+# =========================
+def register_user(username: str, email: str, password: str):
+    response = requests.post(f"{FASTAPI_URL}/register", json={
+        "username": username,
+        "email": email,
+        "password": password
+    })
+    return handle_response(response)
+
+
+def login_user(username: str, password: str):
+    response = requests.post(f"{FASTAPI_URL}/login", json={
+        "username": username,
+        "password": password
+    })
+    return handle_response(response)
+
+
+def upload_documents_to_backend(files, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    files_data = [("files", (f.name, f.getvalue(), f.type)) for f in files]
+
+    response = requests.post(
+        f"{FASTAPI_URL}/upload-documents/",
+        files=files_data,
+        headers=headers,
+        timeout=300
+    )
+    return handle_response(response)
+
+
+def get_all_documents_from_backend(token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f"{FASTAPI_URL}/documents/", headers=headers)
+    return handle_response(response)
+
+
+def delete_document_from_backend(doc_id: str, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.delete(f"{FASTAPI_URL}/documents/{doc_id}", headers=headers)
+    return handle_response(response)
+
+
+def chat_with_backend(query: str,
+                      session_id: str,
+                      doc_ids: Optional[List[str]],
+                      start_date: Optional[date],
+                      end_date: Optional[date],
+                      token: str):
+
+    payload = {
+        "query": query,
+        "session_id": session_id,
+        "document_ids": doc_ids,
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.post(f"{FASTAPI_URL}/chat/", json=payload, headers=headers)
+    return handle_response(response)
+
+
+# =========================
+# SESSION DEFAULTS
+# =========================
+if "current_session_id" not in st.session_state:
+    st.session_state.current_session_id = str(uuid.uuid4())
+
+if "chat_sessions" not in st.session_state:
+    st.session_state.chat_sessions = {st.session_state.current_session_id: []}
+
+if "uploaded_docs" not in st.session_state:
+    st.session_state.uploaded_docs = []
+
+if "selected_doc_ids" not in st.session_state:
+    st.session_state.selected_doc_ids = []
+
+
+# =========================
+# LOGIN / REGISTER PAGE
+# =========================
+if not st.session_state.authenticated:
+
+    st.title("🤖 Velocis AI Assistant")
+    tab1, tab2 = st.tabs(["Login", "Register"])
+
+    # LOGIN
+    with tab1:
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login")
+
+            if submit:
+                result = login_user(username, password)
+
+                if result.get("error"):
+                    st.error(result["error"])
+                elif "access_token" in result:
+                    token = result["access_token"]
+
+                    st.session_state.authenticated = True
+                    st.session_state.token = token
+                    st.session_state.username = result.get("username", username)
+
+                    expiry = datetime.now() + timedelta(days=1)
+                    cookie_manager.set("auth_token", token, expires_at=expiry, key="set_auth_token_login")
+                    cookie_manager.set("username", st.session_state.username, expires_at=expiry, key="set_username_login")
+
+                    st.success("Login successful!")
+                    st.rerun()
+
+    # REGISTER
+    with tab2:
+        with st.form("register_form"):
+            new_username = st.text_input("Username")
+            new_email = st.text_input("Email")
+            new_password = st.text_input("Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            register = st.form_submit_button("Register")
+
+            if register:
+                if new_password != confirm_password:
+                    st.error("Passwords don't match")
+                else:
+                    result = register_user(new_username, new_email, new_password)
+
+                    if result.get("error"):
+                        st.error(result["error"])
+                    elif "access_token" in result:
+                        token = result["access_token"]
+
+                        st.session_state.authenticated = True
+                        st.session_state.token = token
+                        st.session_state.username = result.get("username", new_username)
+
+                        expiry = datetime.now() + timedelta(days=1)
+                        cookie_manager.set("auth_token", token, expires_at=expiry, key="set_auth_token_register")
+                        cookie_manager.set("username", st.session_state.username, expires_at=expiry, key="set_username_register")
+
+                        st.success("Registration successful!")
+                        st.rerun()
+
+    st.stop()
+
+
+# =========================
+# MAIN APP
+# =========================
+
+# ===== HEADER BAR ===== 
+st.markdown(""" <style> .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; } .logout-btn button { height: 42px; } </style> """, unsafe_allow_html=True)
+col1, col2 = st.columns([6, 1])
+
+with col1:
+    st.markdown(f"## 🤖 Welcome, {st.session_state.username}")
+
+with col2:
+    if st.button("Logout", use_container_width=True):
+        logout_user()
+
+
+left_col, center_col, right_col = st.columns([1, 3.5, 0.8])
+
+# =========================
+# DOCUMENT SECTION
+# =========================
+with left_col:
+    st.subheader("📁 Documents")
+
+    uploaded_files = st.file_uploader(
+        "Upload",
+        type=["pdf", "doc", "docx", "xlsx", "csv", "ppt", "pptx"],
+        accept_multiple_files=True,
+        label_visibility="collapsed"
+    )
+
+    if uploaded_files:
+        if st.button("Upload All", key="upload_btn"):
+            with st.spinner("Uploading..."):
+                result = upload_documents_to_backend(uploaded_files, st.session_state.token)
+
+                if isinstance(result, dict) and result.get("error"):
+                    st.error(result["error"])
+                elif isinstance(result, list):
+                    st.success(f"✅ {len(result)} uploaded!")
+                    st.session_state.uploaded_docs = []
+                    st.rerun()
+    
+    st.divider()
+    
+    # Load documents on first render or if empty
+    if not st.session_state.uploaded_docs:
+        docs_result = get_all_documents_from_backend(st.session_state.token)
+        if isinstance(docs_result, list):
+            st.session_state.uploaded_docs = docs_result
+    
+    # Display documents
+    if st.session_state.uploaded_docs:
+        st.caption(f"**{len(st.session_state.uploaded_docs)} Documents**")
+        for doc in st.session_state.uploaded_docs:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.text(f"📄 {doc['filename'][:30]}")
+                st.caption(f"{doc['file_type'].upper()}")
+            with col2:
+                if st.button("🗑️", key=f"del_{doc['id']}"):
+                    delete_document_from_backend(str(doc['id']), st.session_state.token)
+                    st.session_state.uploaded_docs = []
+                    st.rerun()
+    else:
+        st.info("No documents")
+
+
+# =========================
+# CHAT SECTION
+# =========================
+with center_col:
+    st.subheader("💬 Chat")
+
+    messages = st.session_state.chat_sessions.get(
+        st.session_state.current_session_id, []
+    )
+
+    for msg in messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask something..."):
+
+        messages.append({"role": "user", "content": prompt})
+
+        response = chat_with_backend(
+            query=prompt,
+            session_id=st.session_state.current_session_id,
+            doc_ids=st.session_state.selected_doc_ids or None,
+            start_date=None,
+            end_date=None,
+            token=st.session_state.token
+        )
+
+        if response.get("error"):
+            st.error(response["error"])
+        elif "answer" in response:
+            messages.append({"role": "assistant", "content": response["answer"]})
+        else:
+            st.error("Unexpected response")
+
+        st.session_state.chat_sessions[st.session_state.current_session_id] = messages
+        st.rerun()
+
+
+# =========================
+# HISTORY
+# =========================
+with right_col:
+    st.subheader("📜 History")
+
+    messages = st.session_state.chat_sessions.get(
+        st.session_state.current_session_id, []
+    )
+
+    if messages:
+        for msg in messages[-10:]:
+            if msg["role"] == "user":
+                st.write(f"👤 {msg['content'][:40]}...")
+    else:
+        st.info("No messages yet")
+
+
+st.divider()

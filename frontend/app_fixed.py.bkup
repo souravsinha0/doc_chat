@@ -1,0 +1,376 @@
+import uuid
+from datetime import date, datetime
+
+import requests
+import streamlit as st
+
+FASTAPI_URL = "http://localhost:8000"
+
+st.set_page_config(page_title="Velocis AI Assistant", layout="wide", page_icon="🤖")
+
+st.markdown(
+    """
+<style>
+    [data-testid="stToolbar"] { display: none; }
+    .block-container { padding-top: 2.75rem !important; }
+    header[data-testid="stHeader"] { height: 0rem; }
+
+    .st-key-docs_panel, .st-key-history_panel {
+        background: linear-gradient(180deg, #0b1220 0%, #090f1c 100%);
+        border: 1px solid #2b3856 !important;
+        border-radius: 10px;
+        padding: 0.4rem;
+    }
+
+    .small-filetype {
+        font-size: 0.5rem;
+        color: #aaa;
+        margin-top: -6px;
+        display: block;
+    }
+
+    .welcome-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ────────────────────────────────────────────────
+# Session state initialization
+# ────────────────────────────────────────────────
+if "initialized" not in st.session_state:
+    token = st.query_params.get("token")
+    username = st.query_params.get("user")
+
+    if token and username:
+        st.session_state.authenticated = True
+        st.session_state.token = token
+        st.session_state.username = username
+    else:
+        st.session_state.authenticated = False
+        st.session_state.token = None
+        st.session_state.username = None
+
+    st.session_state.initialized = True
+    st.session_state.current_session_id = str(uuid.uuid4())
+    st.session_state.chat_messages = []
+    st.session_state.uploaded_docs = []
+    st.session_state.selected_doc_ids = []
+    st.session_state.chat_sessions = []
+    st.session_state.start_date = None
+    st.session_state.end_date = None
+
+
+def api_call(method, endpoint, token=None, **kwargs):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    url = f"{FASTAPI_URL}{endpoint}"
+    try:
+        if method == "GET":
+            response = requests.get(url, headers=headers, **kwargs)
+        elif method == "POST":
+            response = requests.post(url, headers=headers, **kwargs)
+        elif method == "DELETE":
+            response = requests.delete(url, headers=headers, **kwargs)
+        else:
+            return {"error": f"Unsupported method: {method}"}
+
+        if response.status_code == 401:
+            st.session_state.authenticated = False
+            st.query_params.clear()
+            st.rerun()
+
+        if response.status_code < 400:
+            return response.json()
+
+        try:
+            return {"error": response.json().get("detail", "Error")}
+        except Exception:
+            return {"error": f"HTTP {response.status_code}"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def get_chat_sessions_api(token):
+    return api_call("GET", "/chat-sessions/", token)
+
+
+def get_session_messages_api(token, session_id):
+    result = api_call("GET", f"/chat-history/{session_id}", token)
+    return result if isinstance(result, list) else []
+
+
+def delete_chat_session_api(token, session_id):
+    return api_call("DELETE", f"/chat-sessions/{session_id}", token)
+
+
+# ────────────────────────────────────────────────
+# Login / Register
+# ────────────────────────────────────────────────
+if not st.session_state.authenticated:
+    # st.title("🤖 Velocis AI Assistant")
+    # tab1, tab2 = st.tabs(["Login", "Register"])
+    _, center, _ = st.columns([1, 1.5, 1])
+    with center:
+        st.markdown("<h1 style='text-align: center;'>🤖 Velocis AI</h1>", unsafe_allow_html=True)
+        tab1, tab2 = st.tabs(["🔒 Login", "📝 Register"])
+
+        with tab1:
+            with st.form("login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                if st.form_submit_button("Login"):
+                    result = api_call("POST", "/login", json={"username": username, "password": password})
+                    if result.get("error"):
+                        st.error(result["error"])
+                    elif "access_token" in result:
+                        st.session_state.authenticated = True
+                        st.session_state.token = result["access_token"]
+                        st.session_state.username = result["username"]
+                        st.query_params.update({"token": result["access_token"], "user": result["username"]})
+                        st.success("Login successful")
+                        st.rerun()
+
+        with tab2:
+            with st.form("register_form"):
+                new_username = st.text_input("Username")
+                new_email = st.text_input("Email")
+                new_password = st.text_input("Password", type="password")
+                confirm_password = st.text_input("Confirm Password", type="password")
+                if st.form_submit_button("Register"):
+                    if new_password != confirm_password:
+                        st.error("Passwords do not match")
+                    else:
+                        result = api_call(
+                            "POST",
+                            "/register",
+                            json={"username": new_username, "email": new_email, "password": new_password},
+                        )
+                        if result.get("error"):
+                            st.error(result["error"])
+                        elif "access_token" in result:
+                            st.session_state.authenticated = True
+                            st.session_state.token = result["access_token"]
+                            st.session_state.username = result["username"]
+                            st.query_params.update({"token": result["access_token"], "user": result["username"]})
+                            st.success("Registration successful")
+                            st.rerun()
+    st.stop()
+
+
+# ────────────────────────────────────────────────
+# Main layout – Welcome + Logout aligned
+# ────────────────────────────────────────────────
+col1, col2 = st.columns([6, 0.5])
+with col1:
+    st.markdown(f"## 🤖 Welcome, **{st.session_state.username}** 👋")
+with col2:
+    if st.button("Logout", type="primary", use_container_width=True):
+        st.session_state.authenticated = False
+        st.query_params.clear()
+        st.rerun()
+
+
+left_col, center_col, right_col = st.columns([1, 3, 1], gap="xsmall")
+
+# ────────────────────────────────────────────────
+# LEFT: Documents + Filters
+# ────────────────────────────────────────────────
+with left_col:
+    st.subheader("📁 Documents")
+
+    uploaded_files = st.file_uploader(
+        "Upload",
+        type=["pdf", "doc", "docx", "xlsx", "csv", "ppt", "pptx", "txt", "py", "md"],
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+    )
+
+    if uploaded_files and st.button("Upload Files", use_container_width=True):
+        files_data = [("files", (f.name, f.getvalue(), f.type)) for f in uploaded_files]
+        result = api_call("POST", "/upload-documents/", st.session_state.token, files=files_data, timeout=300)
+        if isinstance(result, list):
+            st.success(f"{len(result)} document(s) uploaded successfully")
+            st.session_state.uploaded_docs = []
+            st.rerun()
+
+    # st.markdown("---")
+
+    if not st.session_state.uploaded_docs:
+        docs = api_call("GET", "/documents/", st.session_state.token)
+        if isinstance(docs, list):
+            st.session_state.uploaded_docs = docs
+
+    docs_panel = st.container(height=340, border=True, key="docs_panel")
+    with docs_panel:
+        if st.session_state.uploaded_docs:
+            for doc in st.session_state.uploaded_docs:
+                doc_col1, doc_col2 = st.columns([3, 1])
+                with doc_col1:
+                    filename = doc["filename"]
+                    ext = filename.rsplit(".", 1)[-1].upper() if "." in filename else "?"
+                    is_selected = str(doc["id"]) in st.session_state.selected_doc_ids
+
+                    if st.checkbox(
+                        f"{filename[:24]}",
+                        value=is_selected,
+                        key=f"doc_{doc['id']}",
+                        help=filename,
+                    ):
+                        if str(doc["id"]) not in st.session_state.selected_doc_ids:
+                            st.session_state.selected_doc_ids.append(str(doc["id"]))
+                    else:
+                        if str(doc["id"]) in st.session_state.selected_doc_ids:
+                            st.session_state.selected_doc_ids.remove(str(doc["id"]))
+
+                    st.markdown(f'<div class="small-filetype">{ext}</div>', unsafe_allow_html=True)
+
+                with doc_col2:
+                    if st.button("🗑️", key=f"del_{doc['id']}"):
+                        api_call("DELETE", f"/documents/{doc['id']}", st.session_state.token)
+                        st.session_state.uploaded_docs = []
+                        st.rerun()
+        else:
+            st.info("No documents uploaded yet.")
+
+    # st.markdown("---")
+    st.subheader("Filters")
+
+    use_date = st.checkbox("Date Filter", value=False)
+    if use_date:
+        start_date = st.date_input("From", value=date(2023, 1, 1))
+        end_date = st.date_input("To", value=date.today())
+        if start_date <= end_date:
+            st.session_state.start_date = start_date
+            st.session_state.end_date = end_date
+        else:
+            st.session_state.start_date = None
+            st.session_state.end_date = None
+    else:
+        st.session_state.start_date = None
+        st.session_state.end_date = None
+
+
+# ────────────────────────────────────────────────
+# CENTER: Chat area
+# ────────────────────────────────────────────────
+with center_col:
+    chat_col1, chat_col2 = st.columns([4, 1], vertical_alignment="center")
+    with chat_col1:
+        st.subheader("💬 How can I help you?")
+    with chat_col2:
+        if st.button("✨ New Chat", use_container_width=True):
+            st.session_state.current_session_id = str(uuid.uuid4())
+            st.session_state.chat_messages = []
+            st.rerun()
+
+    # Display chat history
+    chat_placeholder = st.container(height=410, border=False)
+    with chat_placeholder:
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"], unsafe_allow_html=True)
+
+    # Chat input with thinking indicator
+    if prompt := st.chat_input("Ask about your documents..."):
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with chat_placeholder:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    payload = {
+                        "query": prompt,
+                        "session_id": st.session_state.current_session_id,
+                        "document_ids": st.session_state.selected_doc_ids if st.session_state.selected_doc_ids else None,
+                        "start_date": st.session_state.start_date.isoformat()
+                        if st.session_state.start_date else None,
+                        "end_date": st.session_state.end_date.isoformat()
+                        if st.session_state.end_date else None,
+                    }
+                    response = api_call("POST", "/chat/", st.session_state.token, json=payload)
+
+                if response.get("error"):
+                    st.error(response["error"])
+                elif "answer" in response:
+                    answer = response["answer"]
+                    st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                    st.markdown(answer, unsafe_allow_html=True)
+                else:
+                    st.warning("No valid response received from server.")
+
+        st.rerun()
+
+
+# ────────────────────────────────────────────────
+# RIGHT: Chat History with friendly dates
+# ────────────────────────────────────────────────
+with right_col:
+    st.subheader("📜 History")
+
+    if st.button("Refresh History", use_container_width=True):
+        st.session_state.chat_sessions = []
+        st.rerun()
+
+    if not st.session_state.chat_sessions:
+        sessions = get_chat_sessions_api(st.session_state.token)
+        if isinstance(sessions, list):
+            st.session_state.chat_sessions = sessions
+
+    history_panel = st.container(height=430, border=True, key="history_panel")
+    with history_panel:
+        if st.session_state.chat_sessions:
+            today = datetime.now().date()
+            sessions_by_date = {}
+
+            for session in st.session_state.chat_sessions:
+                try:
+                    last_msg = datetime.fromisoformat(session["last_message"].replace("Z", "+00:00"))
+                    date_key = last_msg.date()
+
+                    if date_key == today:
+                        display = "Today"
+                    elif date_key == today.replace(day=today.day - 1):
+                        display = "Yesterday"
+                    else:
+                        display = date_key.strftime("%d %b %Y")
+
+                    sessions_by_date.setdefault(display, []).append(session)
+                except:
+                    sessions_by_date.setdefault("Other", []).append(session)
+
+            # Show newest first
+            for display_date in sorted(
+                sessions_by_date.keys(),
+                key=lambda x: (x not in ["Today", "Yesterday"], x),
+                reverse=True
+            ):
+                st.markdown(f"**{display_date}**")
+                for session in sessions_by_date[display_date]:
+                    sess_col1, sess_col2 = st.columns([3, 1])
+                    with sess_col1:
+                        if st.button(
+                            f"Chat • {display_date}",
+                            key=f"sess_{session['session_id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.current_session_id = session["session_id"]
+                            messages = get_session_messages_api(st.session_state.token, session["session_id"])
+                            st.session_state.chat_messages = [
+                                {"role": m["role"], "content": m["content"]} for m in messages
+                            ]
+                            st.rerun()
+                    with sess_col2:
+                        if st.button("🗑️", key=f"del_sess_{session['session_id']}"):
+                            delete_chat_session_api(st.session_state.token, session["session_id"])
+                            st.session_state.chat_sessions = []
+                            st.rerun()
+        else:
+            st.info("No previous chats")
+
+st.divider()
+st.caption("© 2026 Velocis Intelligence Unit • Secure Document Analysis")
