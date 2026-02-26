@@ -8,7 +8,7 @@ LLM_MODEL=gemini-2.5-flash-lite
 
 # API Keys (Leave empty for Ollama)
 OPENAI_API_KEY=sk-proj-xxxxxx
-GEMINI_API_KEY=AIzaSyBAJnPmE41NsaNS_uTpN5sVehc74nJojSY
+GEMINI_API_KEY=XXXXX
 
 # Local Ollama Settings
 OLLAMA_BASE_URL=http://localhost:11434
