@@ -1,0 +1,21 @@
+# Database Configuration
+DATABASE_URL=postgresql+asyncpg://postgres:1998@localhost:5432/chatbot
+
+# LLM Configuration (Options: OLLAMA, OPENAI, GEMINI)
+LLM_PROVIDER=GEMINI
+#LLM_MODEL=gpt-4o
+LLM_MODEL=gemini-2.5-flash-lite
+
+# API Keys (Leave empty for Ollama)
+OPENAI_API_KEY=sk-proj-xxxxxx
+GEMINI_API_KEY=AIzaSyBAJnPmE41NsaNS_uTpN5sVehc74nJojSY
+
+# Local Ollama Settings
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Vector Settings
+EMBEDDING_DIM=384
+
+JWT_SECRET_KEY=your-secret-key-change-in-production
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_MINUTES=1440

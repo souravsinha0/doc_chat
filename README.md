@@ -33,7 +33,7 @@ This project is a modular, high-performance RAG (Retrieval-Augmented Generation)
 Create a `.env` file in the root directory:
 ```env
 # Database Settings
-DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/rag_db
+DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/chatbot
 
 # Provider Selection: OLLAMA, OPENAI, or GEMINI
 LLM_PROVIDER=OLLAMA
