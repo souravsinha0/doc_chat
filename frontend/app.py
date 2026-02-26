@@ -298,8 +298,6 @@ if "initialized" not in st.session_state:
     st.session_state.chat_sessions = []
     st.session_state.start_date = None
     st.session_state.end_date = None
-    st.session_state.upload_in_progress = False
-    st.session_state.uploader_key = 0
 
 
 def api_call(method, endpoint, token=None, **kwargs):
@@ -357,7 +355,7 @@ if not st.session_state.authenticated:
                             background:linear-gradient(135deg,#60a5fa,#6366f1);
                             -webkit-background-clip:text;-webkit-text-fill-color:transparent;
                             background-clip:text;letter-spacing:-0.04em;">
-                    ⬡ Velocis Document Analyzer
+                    ⬡ Velocis AI
                 </div>
                 <div style="color:#4a5878;font-size:0.82rem;margin-top:0.3rem;letter-spacing:0.04em;">
                     SECURE DOCUMENT INTELLIGENCE
@@ -367,7 +365,7 @@ if not st.session_state.authenticated:
             unsafe_allow_html=True,
         )
 
-        # st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🔒  Sign In", "📝  Create Account"])
 
         with tab1:
@@ -425,7 +423,7 @@ if not st.session_state.authenticated:
 col_brand, col_user, col_logout = st.columns([5, 1.5, 0.7])
 with col_brand:
     st.markdown(
-        '<span class="header-brand">⬡ Velocis Document Analyzer</span>'
+        '<span class="header-brand">⬡ Velocis AI</span>'
         '<span style="color:#4a5878;font-size:0.75rem;margin-left:0.75rem;letter-spacing:0.05em;">DOCUMENT INTELLIGENCE</span>',
         unsafe_allow_html=True,
     )
@@ -463,8 +461,6 @@ with left_col:
         accept_multiple_files=True,
         label_visibility="collapsed",
         help=f"Select up to {MAX_UPLOAD_FILES_PER_BATCH} files per upload. You can upload as many times as needed.",
-        key=f"uploader_{st.session_state.uploader_key}",
-        disabled=st.session_state.upload_in_progress,
     )
 
     if uploaded_files:
@@ -476,33 +472,15 @@ with left_col:
             )
             uploaded_files = uploaded_files[:MAX_UPLOAD_FILES_PER_BATCH]
 
-        if st.button("⬆ Upload Files", use_container_width=True, type="primary", disabled=st.session_state.upload_in_progress):
-            st.session_state.upload_in_progress = True
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
+        if st.button("⬆ Upload Files", use_container_width=True, type="primary"):
             files_data = [("files", (f.name, f.getvalue(), f.type)) for f in uploaded_files]
-            total_files = len(files_data)
-            
-            status_text.info(f"⏳ Processing {total_files} file(s)... Please wait, this may take a few minutes.")
-            progress_bar.progress(50)
-            
-            result = api_call("POST", "/upload-documents/", st.session_state.token, files=files_data, timeout=600)
-            
-            progress_bar.progress(100)
-            
+            result = api_call("POST", "/upload-documents/", st.session_state.token, files=files_data, timeout=300)
             if isinstance(result, list):
-                status_text.success(f"✓ {len(result)} document(s) uploaded and processed successfully!")
+                st.success(f"✓ {len(result)} document(s) uploaded")
                 st.session_state.uploaded_docs = []
-                st.session_state.upload_in_progress = False
-                st.session_state.uploader_key += 1
                 st.rerun()
             elif result.get("error"):
-                status_text.error(result["error"])
-                st.session_state.upload_in_progress = False
-    
-    if st.session_state.upload_in_progress:
-        st.info("🔄 Upload in progress... Chat is disabled until processing completes.")
+                st.error(result["error"])
 
     docs_panel = st.container(height=330, border=True, key="docs_panel")
     with docs_panel:
@@ -517,7 +495,7 @@ with left_col:
 
                 with col_chk:
                     checked = st.checkbox(
-                        "",
+                        filename,
                         value=is_selected,
                         key=f"doc_{doc['id']}",
                         help=filename,
@@ -616,7 +594,7 @@ with center_col:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"], unsafe_allow_html=True)
 
-    if prompt := st.chat_input("Ask about your documents…", disabled=st.session_state.upload_in_progress):
+    if prompt := st.chat_input("Ask about your documents…"):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         with chat_placeholder:
             with st.chat_message("user"):
