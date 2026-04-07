@@ -22,5 +22,13 @@ def get_llm():
             model=settings.LLM_MODEL, 
             base_url=settings.OLLAMA_BASE_URL
         )
+    elif provider == "ONPREM":
+        # vLLM exposes an OpenAI-compatible API — reuse ChatOpenAI with custom base_url
+        return ChatOpenAI(
+            model=settings.ON_PREM_MODEL_NAME,
+            base_url=settings.ON_PREM_MODEL_URL,
+            api_key="not-required",  # vLLM doesn't need a real key
+            temperature=0.1,
+        )
     else:
         raise ValueError(f"Unsupported LLM_PROVIDER: {provider}")

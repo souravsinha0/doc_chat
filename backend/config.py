@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     
     # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # On-Premise vLLM server (OpenAI-compatible)
+    ON_PREM_MODEL_URL: str = "http://localhost:8001/v1"
+    ON_PREM_MODEL_NAME: str = "gpt-oss-20b"
     
     # Updated to use the absolute path
     model_config = SettingsConfigDict(

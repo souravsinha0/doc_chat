@@ -1,354 +1,294 @@
-# 🤖 Vel RAG Chatbot: Enterprise-Grade Multi-Format Document Q&A
+# Velocis Document Analyzer — Deployment Guide
 
-A production-ready RAG (Retrieval-Augmented Generation) application with **conversational memory**, **multi-format document support**, and **GPU-accelerated embeddings**. Built with FastAPI, Streamlit, and PostgreSQL (pgvector).
-
----
-
-## ✨ Key Features
-
-### 📄 Multi-Format Document Support
-- **Supported Formats**: PDF, DOC, DOCX, XLSX, CSV, PPT, PPTX
-- **Batch Upload**: Upload multiple documents simultaneously
-- **Smart Extraction**: Automatic text extraction optimized per format
-
-### 💬 Conversational Memory
-- **Context-Aware Responses**: Maintains conversation history across messages
-- **Multi-Session Support**: Create and manage multiple chat threads
-- **Session Persistence**: Chat history stored in PostgreSQL
-
-### 🎯 Advanced Filtering
-- **Document-Specific Search**: Filter responses by selected documents
-- **Date Range Filtering**: Query documents within specific time periods
-- **Hybrid Filtering**: Combine document and date filters
-
-### 🗑️ Document Management
-- **Delete Documents**: Remove documents and automatically clean up database entries
-- **View Metadata**: Track upload dates and file types
-- **Source Citations**: View exact document chunks used in responses
-
-### 🚀 Performance & Scalability
-- **GPU Acceleration**: Automatic NVIDIA GPU detection for embeddings
-- **Async Architecture**: FastAPI async endpoints for high concurrency
-- **Vector Search**: pgvector for efficient similarity search
-
-### 🔄 Provider Flexibility
-- **Local LLM**: Ollama (Llama-3, Mistral, etc.)
-- **Cloud LLMs**: OpenAI GPT-4, Google Gemini
-- **Easy Switching**: Change providers via `.env` configuration
+A production-ready RAG (Retrieval-Augmented Generation) application with a React frontend, FastAPI backend, and PostgreSQL + pgvector database.
 
 ---
 
-## 🛠️ Technical Stack
+## Architecture
 
-| Component | Technology |
-|-----------|-----------|
-| **Backend API** | FastAPI (Async) |
-| **Frontend** | Streamlit |
-| **Database** | PostgreSQL + pgvector |
-| **Embeddings** | sentence-transformers (CUDA/GPU) |
-| **LLM Framework** | LangChain |
-| **Document Processing** | pypdf, python-docx, openpyxl, python-pptx |
-| **LLM Providers** | Ollama, OpenAI, Google Gemini |
+```
+┌─────────────────┐     HTTP/REST      ┌──────────────────────┐
+│  React Frontend │ ─────────────────► │  FastAPI Backend     │
+│  (Nginx :3000)  │                    │  (:8000)             │
+└─────────────────┘                    └──────────┬───────────┘
+                                                   │
+                          ┌────────────────────────┼────────────────────────┐
+                          ▼                        ▼                        ▼
+               ┌──────────────────┐   ┌────────────────────┐  ┌────────────────────┐
+               │  PostgreSQL      │   │  HuggingFace       │  │  LLM Provider      │
+               │  + pgvector      │   │  Embeddings        │  │  (vLLM / OpenAI /  │
+               │  (:5432)         │   │  (all-mpnet-base)  │  │   Gemini / Ollama) │
+               └──────────────────┘   └────────────────────┘  └────────────────────┘
+```
 
 ---
 
-## 📦 Installation
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Axios, react-markdown, react-dropzone |
+| Backend | FastAPI (async), LangChain, Pydantic Settings |
+| Database | PostgreSQL 16 + pgvector extension |
+| Embeddings | HuggingFace `all-mpnet-base-v2` (GPU-accelerated) |
+| LLM Engines | vLLM (on-prem), OpenAI, Google Gemini, Ollama |
+| Container | Docker + Docker Compose |
+| Web Server | Nginx (serves React build) |
+
+---
+
+## Supported File Formats
+
+PDF, DOC, DOCX, XLSX, CSV, PPT, PPTX, TXT, PY, MD
+
+---
+
+## Quick Start (Docker — Recommended)
 
 ### Prerequisites
-- Python 3.10+
-- PostgreSQL 14+ with pgvector extension
-- (Optional) NVIDIA GPU with CUDA for accelerated embeddings
-- (Optional) Ollama for local LLM
+- Docker Desktop 24+ with Docker Compose v2
+- 8 GB RAM minimum (16 GB recommended for local embeddings)
 
-### 1. Clone Repository
+### Step 1 — Clone and configure
+
 ```bash
-git clone <repository-url>
+git clone <your-repo-url>
 cd vel_chatbot
+
+# Copy the example env file
+cp .env.example .env
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements_new.txt
-```
-
-### 3. Setup PostgreSQL with pgvector
-```sql
-CREATE DATABASE chatbot;
-\c chatbot
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-### 4. Configure Environment
-Create `.env` file in `backend/` directory:
-
+Edit `.env` and set at minimum:
 ```env
-# Database
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/chatbot
-
-# LLM Provider (OLLAMA, OPENAI, or GEMINI)
-LLM_PROVIDER=OLLAMA
-LLM_MODEL=llama3
-
-# API Keys (for cloud providers)
-OPENAI_API_KEY=your_openai_key_here
-GEMINI_API_KEY=your_gemini_key_here
-
-# Ollama Settings (for local)
-OLLAMA_BASE_URL=http://localhost:11434
+POSTGRES_PASSWORD=your_strong_password
+JWT_SECRET_KEY=your-long-random-secret-string
 ```
 
-### 5. Initialize Database
-The database tables will be created automatically on first run.
+### Step 2 — Choose your LLM provider
 
----
-
-## 🚀 Running the Application
-
-### Start Backend
-```bash
-cd backend
-uvicorn main:app --reload --port 8000
-```
-
-### Start Frontend
-```bash
-cd frontend
-streamlit run app_new.py
-```
-
-Access the application at: **http://localhost:8501**
-
----
-
-## 📖 Usage Guide
-
-### 1. Upload Documents
-- Click **"Upload Documents"** in the sidebar
-- Select multiple files (PDF, DOCX, XLSX, CSV, PPTX)
-- Click **"📤 Upload All"**
-- Documents are automatically processed and indexed
-
-### 2. Start Chatting
-- Type your question in the chat input
-- The assistant retrieves relevant context and responds
-- View source citations by expanding **"📄 View Sources"**
-
-### 3. Filter Responses
-- **By Document**: Select specific documents from the sidebar
-- **By Date**: Enable date filter and set date range
-- Filters apply to all subsequent queries
-
-### 4. Manage Chat Sessions
-- Click **"➕ New Chat"** to start a fresh conversation
-- Each session maintains independent conversation history
-- Previous context is automatically included in responses
-
-### 5. Delete Documents
-- Click **🗑️** next to any document in the sidebar
-- Document and all associated chunks are removed from database
-
----
-
-## 🏗️ Project Structure
-
-```
-vel_chatbot/
-├── backend/
-│   ├── main.py                    # FastAPI app with all endpoints
-│   ├── config.py                  # Environment configuration
-│   ├── database.py                # SQLAlchemy models & DB operations
-│   ├── services/
-│   │   ├── ingestor_new.py       # Multi-format document processing
-│   │   ├── retriever.py          # Vector similarity search
-│   │   ├── llm_client.py         # LLM integration with memory
-│   │   └── llm_factory.py        # Provider switching logic
-│   └── .env                       # Configuration (not in repo)
-├── frontend/
-│   └── app_fixed.py                 # Enhanced Streamlit UI
-├── requirements_new.txt           # Python dependencies
-└── README.md                      # This file
-```
-
----
-
-## 🔧 API Endpoints
-
-### Documents
-- `POST /upload-documents/` - Upload multiple documents
-- `GET /documents/` - List all documents
-- `DELETE /documents/{document_id}` - Delete document
-
-### Chat
-- `POST /chat/` - Send query with session context
-  ```json
-  {
-    "query": "What is the main topic?",
-    "session_id": "uuid",
-    "document_ids": ["uuid1", "uuid2"],
-    "start_date": "2024-01-01",
-    "end_date": "2024-12-31"
-  }
-  ```
-
----
-
-## 🎨 UI Features
-
-### Modern Design
-- Gradient headers and smooth animations
-- Responsive layout with sidebar navigation
-- Color-coded document cards
-- Interactive hover effects
-
-### User Experience
-- Real-time upload progress
-- Inline document deletion
-- Expandable source citations
-- Session ID display for tracking
-
----
-
-## 🔐 Security Best Practices
-
-- Store API keys in `.env` (never commit)
-- Use environment variables for sensitive data
-- Implement authentication for production deployment
-- Sanitize user inputs before processing
-
----
-
-## 🚀 Performance Optimization
-
-### GPU Acceleration
-The system automatically detects NVIDIA GPUs:
-```python
-device = "cuda" if torch.cuda.is_available() else "cpu"
-```
-
-### Batch Processing
-- Documents are chunked and embedded in batches
-- Reduces processing time for large documents
-
-### Async Operations
-- All database operations are async
-- Non-blocking API endpoints for better concurrency
-
----
-
-## 🐛 Troubleshooting
-
-### Backend won't start
-- Verify PostgreSQL is running
-- Check DATABASE_URL in `.env`
-- Ensure pgvector extension is installed
-
-### Documents not uploading
-- Check file format is supported
-- Verify file size limits
-- Check backend logs for errors
-
-### Chat responses are slow
-- For local LLM: Ensure Ollama is running
-- For cloud LLM: Check API key validity
-- Consider using GPU for embeddings
-
-### No GPU detected
-- Install CUDA toolkit
-- Verify PyTorch CUDA installation: `torch.cuda.is_available()`
-
----
-
-## 📊 Database Schema
-
-### Documents Table
-```sql
-id          UUID PRIMARY KEY
-filename    VARCHAR
-file_type   VARCHAR
-uploaded_at DATE
-```
-
-### Document Chunks Table
-```sql
-id          UUID PRIMARY KEY
-document_id UUID FOREIGN KEY
-content     TEXT
-embedding   VECTOR(384)
-uploaded_at TIMESTAMP
-```
-
-### Chat History Table
-```sql
-id          UUID PRIMARY KEY
-session_id  UUID
-role        VARCHAR (user/assistant)
-content     TEXT
-created_at  TIMESTAMP
-```
-
----
-
-## 🔄 Switching LLM Providers
-
-Edit `.env` file:
-
-### For Ollama (Local)
+#### Option A: On-Premise vLLM (recommended for no usage costs)
 ```env
-LLM_PROVIDER=OLLAMA
-LLM_MODEL=llama3
-OLLAMA_BASE_URL=http://localhost:11434
+LLM_PROVIDER=ONPREM
+ON_PREM_MODEL_URL=http://your-vllm-server:8001/v1
+ON_PREM_MODEL_NAME=gpt-oss-20b
 ```
 
-### For OpenAI
+#### Option B: OpenAI
 ```env
 LLM_PROVIDER=OPENAI
 LLM_MODEL=gpt-4o
 OPENAI_API_KEY=sk-...
 ```
 
-### For Google Gemini
+#### Option C: Google Gemini
 ```env
 LLM_PROVIDER=GEMINI
-LLM_MODEL=gemini-1.5-flash
-GEMINI_API_KEY=...
+LLM_MODEL=gemini-2.5-flash-lite
+GEMINI_API_KEY=AIza...
+```
+
+#### Option D: Ollama (local)
+```env
+LLM_PROVIDER=OLLAMA
+LLM_MODEL=llama3
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+### Step 3 — Build and run
+
+```bash
+docker compose up --build -d
+```
+
+This starts three containers:
+- `db` — PostgreSQL with pgvector
+- `backend` — FastAPI on port 8000
+- `frontend` — React app served by Nginx on port 3000
+
+### Step 4 — Open the app
+
+```
+http://localhost:3000
+```
+
+Register a new account and start uploading documents.
+
+---
+
+## On-Premise vLLM Setup
+
+If you are serving `gpt-oss-20b` (or any model) on your own server using vLLM:
+
+### Install vLLM on your GPU server
+
+```bash
+pip install vllm
+```
+
+### Start the vLLM server
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+  --model /path/to/gpt-oss-20b \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --served-model-name gpt-oss-20b \
+  --tensor-parallel-size 2   # adjust to your GPU count
+```
+
+vLLM exposes an OpenAI-compatible API at `http://<server-ip>:8001/v1`.
+
+### Configure the backend
+
+```env
+LLM_PROVIDER=ONPREM
+ON_PREM_MODEL_URL=http://<server-ip>:8001/v1
+ON_PREM_MODEL_NAME=gpt-oss-20b
+```
+
+No API key is required — vLLM accepts any string as the key.
+
+---
+
+## Local Development (without Docker)
+
+### Backend
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Linux/macOS
+
+pip install -r ../requirements_new.txt
+
+# Make sure PostgreSQL is running with pgvector enabled
+# Then run:
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend (React)
+
+```bash
+cd frontend-react
+npm install
+npm start          # Runs on http://localhost:3000
+```
+
+The React dev server proxies API calls to `http://localhost:8000` automatically.
+
+### Legacy Streamlit Frontend
+
+```bash
+cd frontend
+streamlit run app.py
 ```
 
 ---
 
-## 🤝 Contributing
+## Database Setup (manual / first run)
 
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+If running without Docker, initialize the database manually:
 
----
+```sql
+-- Connect to PostgreSQL and run:
+CREATE DATABASE chatbot;
+\c chatbot
+CREATE EXTENSION IF NOT EXISTS vector;
+```
 
-## 📝 License
-
-This project is licensed under the MIT License.
+The FastAPI app auto-creates all tables on startup via SQLAlchemy.
 
 ---
 
-## 🙏 Acknowledgments
+## Environment Variables Reference
 
-- **LangChain** for LLM orchestration
-- **pgvector** for vector similarity search
-- **Sentence Transformers** for embeddings
-- **FastAPI** for modern async API framework
-- **Streamlit** for rapid UI development
+| Variable | Default | Description |
+|---|---|---|
+| `POSTGRES_DB` | `chatbot` | Database name |
+| `POSTGRES_USER` | `postgres` | Database user |
+| `POSTGRES_PASSWORD` | — | **Required.** Database password |
+| `LLM_PROVIDER` | `ONPREM` | `ONPREM`, `OPENAI`, `GEMINI`, or `OLLAMA` |
+| `LLM_MODEL` | `gpt-oss-20b` | Model name (for OPENAI/GEMINI providers) |
+| `ON_PREM_MODEL_URL` | `http://localhost:8001/v1` | vLLM server base URL |
+| `ON_PREM_MODEL_NAME` | `gpt-oss-20b` | Model name served by vLLM |
+| `OPENAI_API_KEY` | — | Required for `OPENAI` provider |
+| `GEMINI_API_KEY` | — | Required for `GEMINI` provider |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `JWT_SECRET_KEY` | — | **Required.** Secret for JWT signing |
+| `REACT_APP_API_URL` | `http://localhost:8000` | Backend URL visible from the browser |
 
 ---
 
-## 📧 Support
+## Docker Commands Reference
 
-For issues and questions:
-- Open an issue on GitHub
-- Check existing documentation
-- Review troubleshooting section
+```bash
+# Start all services
+docker compose up -d
+
+# Rebuild after code changes
+docker compose up --build -d
+
+# View logs
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (wipes database)
+docker compose down -v
+
+# Scale backend (if needed)
+docker compose up -d --scale backend=2
+```
 
 ---
 
-**Built with ❤️ for enterprise-grade document intelligence**
+## Production Deployment Notes
+
+1. **Change secrets** — Set strong values for `POSTGRES_PASSWORD` and `JWT_SECRET_KEY` in `.env`
+2. **HTTPS** — Place a reverse proxy (Nginx/Traefik/Caddy) in front with SSL termination
+3. **CORS** — Update `allow_origins` in `backend/main.py` to your production domain
+4. **React API URL** — Set `REACT_APP_API_URL` to your public backend URL before building
+5. **Embedding cache** — The `model_cache` Docker volume persists the HuggingFace model download between restarts
+6. **GPU for embeddings** — Add `deploy.resources.reservations.devices` to the backend service in `docker-compose.yaml` to pass through a GPU
+
+---
+
+## Project Structure
+
+```
+vel_chatbot/
+├── backend/
+│   ├── main.py                  # FastAPI app, all endpoints
+│   ├── config.py                # Pydantic settings, reads .env
+│   ├── database.py              # SQLAlchemy models & async DB helpers
+│   └── services/
+│       ├── llm_factory.py       # Provider switcher (ONPREM/OPENAI/GEMINI/OLLAMA)
+│       ├── llm_client.py        # RAG chain with chat history
+│       ├── ingestor_new.py      # Document parsing & chunking
+│       └── retriever.py         # pgvector similarity search
+├── frontend-react/              # React 18 frontend
+│   ├── src/
+│   │   ├── App.js               # Root component, state management
+│   │   ├── api/client.js        # Axios API layer
+│   │   ├── hooks/useAuth.js     # Auth state with localStorage
+│   │   └── components/
+│   │       ├── AuthPage.jsx     # Login / Register
+│   │       ├── DocumentPanel.jsx # Upload + document list
+│   │       ├── ChatPanel.jsx    # Chat UI with markdown rendering
+│   │       └── HistoryPanel.jsx # Day-grouped chat history
+│   └── package.json
+├── frontend/
+│   └── app.py                   # Legacy Streamlit UI (still functional)
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── docker-compose.yaml
+├── nginx.conf
+├── .env.example
+└── README_NEW.md
+```
