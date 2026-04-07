@@ -219,7 +219,7 @@ The FastAPI app auto-creates all tables on startup via SQLAlchemy.
 | `GEMINI_API_KEY` | — | Required for `GEMINI` provider |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `JWT_SECRET_KEY` | — | **Required.** Secret for JWT signing |
-| `REACT_APP_API_URL` | `http://localhost:8000` | Backend URL visible from the browser |
+| `VITE_API_URL` | `/api` | Backend URL visible from the browser. Use `/api` when the frontend is served by the bundled Nginx proxy |
 
 ---
 
@@ -252,8 +252,8 @@ docker compose up -d --scale backend=2
 
 1. **Change secrets** — Set strong values for `POSTGRES_PASSWORD` and `JWT_SECRET_KEY` in `.env`
 2. **HTTPS** — Place a reverse proxy (Nginx/Traefik/Caddy) in front with SSL termination
-3. **CORS** — Update `allow_origins` in `backend/main.py` to your production domain
-4. **React API URL** — Set `REACT_APP_API_URL` to your public backend URL before building
+3. **CORS** — Set `CORS_ALLOW_ORIGINS` in `.env` to your production frontend origin if you call the backend directly
+4. **React API URL** — Set `VITE_API_URL` before building. In the bundled Docker/Nginx deployment, `/api` is the safest default
 5. **Embedding cache** — The `model_cache` Docker volume persists the HuggingFace model download between restarts
 6. **GPU for embeddings** — Add `deploy.resources.reservations.devices` to the backend service in `docker-compose.yaml` to pass through a GPU
 

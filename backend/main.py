@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,25 +21,47 @@ security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+
+def _parse_cors_origins() -> list[str]:
+    origins = os.getenv("CORS_ALLOW_ORIGINS")
+    if origins:
+        return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
+    return [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:5173",
         "http://frontend:3000",
-    ],
+        "http://frontend:3003",
+    ]
+
+
+allowed_origins = _parse_cors_origins()
+allowed_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-SECRET_KEY = "your-secret-key-change-in-production"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 @app.on_event("startup")
 async def startup_event():
+    logger.info(
+        "Configured CORS origins=%s regex=%s",
+        allowed_origins,
+        allowed_origin_regex,
+    )
     await init_db()
 
 # --- Pydantic Models ---
