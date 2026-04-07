@@ -29,9 +29,10 @@ MANIFEST
 *.env
 __pycache__/
 *.pyc
-*.json
+#*.json
 config.toml
 chainlit.md
+.chainlit/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
