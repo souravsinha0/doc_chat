@@ -35,7 +35,7 @@ def _parse_cors_origins() -> list[str]:
         "http://127.0.0.1:3001",
         "http://127.0.0.1:5173",
         "http://frontend:3000",
-        "http://frontend:3003",
+        "http://10.52.1.13:3003",
     ]
 
 
@@ -44,7 +44,7 @@ allowed_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],
     allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
